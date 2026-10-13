@@ -1,0 +1,180 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  users       User[]
+
+  @@map("roles")
+}
+
+model User {
+  user_id              Int                @id @default(autoincrement())
+  name                 String
+  email                String             @unique
+  phone                String?
+  password_hash        String
+  role_id              Int
+  status               String             @default("ACTIVE") // ACTIVE, PENDING, SUSPENDED
+  assigned_facility_id Int?
+  created_at           DateTime           @default(now())
+  updated_at           DateTime           @updatedAt
+
+  role                 Role               @relation(fields: [role_id], references: [id])
+  assigned_facility    Facility?          @relation("AssignedRepresentative", fields: [assigned_facility_id], references: [facility_id])
+  saved_facilities     SavedFacility[]
+  reports              Report[]
+  facility_revisions   FacilityRevision[] @relation("SubmittedRevisions")
+  audit_events         AuditEvent[]
+
+  @@map("users")
+}
+
+model Facility {
+  facility_id      Int                @id @default(autoincrement())
+  facility_name    String
+  facility_type    String             // HOSPITAL, CLINIC, PHARMACY, DIAGNOSTIC_CENTRE, BLOOD_CENTRE, LABORATORY, OTHER
+  address          String
+  locality         String?            // Area / locality (e.g. Wakad, Baner, Kothrud, Hinjawadi)
+  city             String
+  state            String
+  pincode          String
+  latitude         Float
+  longitude        Float
+  phone            String
+  email            String?
+  operating_hours  String
+  status           String             @default("PENDING") // PENDING, VERIFIED, REJECTED, ARCHIVED
+  data_origin      String             @default("DEMONSTRATION_SAMPLE") // DEMONSTRATION_SAMPLE, OFFICIAL_VERIFIED, CROWDSOURCED_UNVERIFIED
+  verified_at      DateTime?
+  verified_by      Int?
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @updatedAt
+
+  representatives  User[]             @relation("AssignedRepresentative")
+  facility_services FacilityService[]
+  cost_records     CostRecord[]
+  saved_by         SavedFacility[]
+  reports          Report[]
+  revisions        FacilityRevision[]
+
+  @@map("facilities")
+}
+
+model Service {
+  service_id       Int                @id @default(autoincrement())
+  name             String             @unique
+  category         String
+  description      String?
+  created_at       DateTime           @default(now())
+
+  facility_services FacilityService[]
+  cost_records     CostRecord[]
+
+  @@map("services")
+}
+
+model FacilityService {
+  facility_service_id Int      @id @default(autoincrement())
+  facility_id         Int
+  service_id          Int
+  is_available        Boolean  @default(true)
+
+  facility            Facility @relation(fields: [facility_id], references: [facility_id], onDelete: Cascade)
+  service             Service  @relation(fields: [service_id], references: [service_id], onDelete: Cascade)
+
+  @@unique([facility_id, service_id])
+  @@map("facility_services")
+}
+
+model CostRecord {
+  cost_id             Int       @id @default(autoincrement())
+  facility_id         Int
+  service_id          Int
+  amount_min          Float
+  amount_max          Float
+  currency            String    @default("INR")
+  unit_basis          String    @default("per service") // per consultation, per test, per scan, etc.
+  source              String    @default("Facility Representative Submission")
+  verification_status String    @default("PENDING") // PENDING, VERIFIED, REJECTED
+  verified_at         DateTime?
+  verified_by         Int?
+  collected_date      DateTime  @default(now())
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  facility            Facility  @relation(fields: [facility_id], references: [facility_id], onDelete: Cascade)
+  service             Service   @relation(fields: [service_id], references: [service_id], onDelete: Cascade)
+
+  @@map("cost_records")
+}
+
+model SavedFacility {
+  saved_id    Int      @id @default(autoincrement())
+  user_id     Int
+  facility_id Int
+  created_at  DateTime @default(now())
+
+  user        User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  facility    Facility @relation(fields: [facility_id], references: [facility_id], onDelete: Cascade)
+
+  @@unique([user_id, facility_id])
+  @@map("saved_facilities")
+}
+
+model Report {
+  report_id    Int      @id @default(autoincrement())
+  facility_id  Int
+  user_id      Int
+  category     String   // INCORRECT_ADDRESS, INCORRECT_PHONE, INCORRECT_HOURS, INCORRECT_SERVICE, INCORRECT_COST, DUPLICATE_FACILITY, NO_LONGER_OPERATING, OTHER
+  description  String
+  status       String   @default("OPEN") // OPEN, UNDER_REVIEW, RESOLVED, REJECTED
+  admin_notes  String?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  facility     Facility @relation(fields: [facility_id], references: [facility_id], onDelete: Cascade)
+  reporter     User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@map("reports")
+}
+
+model FacilityRevision {
+  revision_id    Int       @id @default(autoincrement())
+  facility_id    Int
+  submitted_by   Int
+  proposed_data  String    // JSON text with proposed changes
+  existing_data  String    // JSON text with original state
+  status         String    @default("PENDING") // PENDING, APPROVED, REJECTED, CORRECTION_REQUESTED
+  reviewed_by    Int?
+  review_notes   String?
+  created_at     DateTime  @default(now())
+  reviewed_at    DateTime?
+
+  facility       Facility  @relation(fields: [facility_id], references: [facility_id], onDelete: Cascade)
+  submitter      User      @relation("SubmittedRevisions", fields: [submitted_by], references: [user_id], onDelete: Cascade)
+
+  @@map("facility_revisions")
+}
+
+model AuditEvent {
+  audit_id   Int      @id @default(autoincrement())
+  user_id    Int?
+  action     String   // USER_REGISTER, USER_LOGIN, FACILITY_CREATE, FACILITY_UPDATE, FACILITY_VERIFY, etc.
+  entity     String   // User, Facility, CostRecord, Report, FacilityRevision
+  entity_id  String
+  metadata   String?  // JSON string
+  timestamp  DateTime @default(now())
+
+  user       User?    @relation(fields: [user_id], references: [user_id], onDelete: SetNull)
+
+  @@map("audit_events")
+}

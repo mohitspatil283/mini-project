@@ -1,0 +1,15 @@
+{
+  "name": "mediguide-platform",
+  "version": "1.0.0",
+  "description": "MediGuide - Integrated Healthcare Navigation and Cost Transparency Platform",
+  "scripts": {
+    "dev": "concurrently \"npm.cmd run dev --prefix server\" \"npm.cmd run dev --prefix client\"",
+    "dev:server": "npm.cmd run dev --prefix server",
+    "dev:client": "npm.cmd run dev --prefix client",
+    "prisma:seed": "npm.cmd run prisma:seed --prefix server",
+    "test": "npm.cmd run test --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
